@@ -16,8 +16,8 @@
 <body>
 <!-- Reproductor para las ventanas de Ayuda del Geoportal (exb_config.py, _vista_video).
      Uso: reproductor.html?v=<url del mp4>. ExB no desmonta la ventana al cerrarla (solo la
-     oculta): aqui se pausa el video en cuanto el iframe deja de verse y se reanuda al
-     volver a verse. -->
+     oculta): aqui se pausa el video y se corta su descarga en cuanto el iframe deja de
+     verse, y se reanuda desde el mismo punto al volver a verse. -->
 <video id="v" controls preload="auto" playsinline></video>
 <button id="sonido" type="button" hidden>&#128263; Activar sonido</button>
 <script>
@@ -42,10 +42,32 @@
     });
   }
   function pausar() { if (!v.paused) { v.pause(); } }
+  // Al cerrar la ventana: pausa y corta la descarga (quitar la fuente + load() aborta la
+  // peticion), guardando la posicion. Al reabrir: vuelve la fuente y sigue desde ahi.
+  var posicion = 0, descargando = false;
+  function cargar() {
+    if (!valido || descargando) { return; }
+    descargando = true;
+    v.src = url;
+    if (posicion) {
+      v.addEventListener("loadedmetadata", function seek() {
+        v.removeEventListener("loadedmetadata", seek);
+        v.currentTime = posicion;
+      });
+    }
+  }
+  function cortar() {
+    pausar();
+    if (!descargando) { return; }
+    posicion = v.currentTime || posicion;
+    descargando = false;
+    v.removeAttribute("src");
+    v.load();
+  }
   function verse(si) {
     if (si === visible) { return; }
     visible = si;
-    if (si) { reproducir(); } else { pausar(); }
+    if (si) { cargar(); reproducir(); } else { cortar(); }
   }
 
   sonido.addEventListener("click", function () {
@@ -55,13 +77,15 @@
   });
   v.addEventListener("volumechange", function () { if (!v.muted) { sonido.hidden = true; } });
 
-  if (valido) { v.src = url; reproducir(); }
+  cargar();
+  reproducir();
 
   // La ventana cerrada deja el iframe con 0 px o fuera de la vista
   addEventListener("resize", function () { verse(!!(innerWidth && innerHeight)); });
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (e) { verse(e[0].isIntersecting); }).observe(v);
   }
+  // Pestana del navegador en segundo plano: solo pausa (al volver se sigue con el play)
   document.addEventListener("visibilitychange", function () { if (document.hidden) { pausar(); } });
 </script>
 </body>
