@@ -4,47 +4,34 @@
 <meta charset="utf-8">
 <title>Vídeo</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
-               font-family: "Segoe UI", Selawik, Arial, sans-serif; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   video { display: block; width: 100%; height: 100%; }
-  #sonido { position: absolute; top: 12px; right: 12px; padding: 6px 12px;
-            border: 1px solid #fff; border-radius: 4px; background: rgba(0,0,0,.6);
-            color: #fff; font-size: 14px; cursor: pointer; }
-  #sonido:hover { background: #195abc; }
+  #play { position: absolute; top: 50%; left: 50%; width: 88px; height: 88px;
+          margin: -44px 0 0 -44px; padding: 0; border: 3px solid #fff; border-radius: 50%;
+          background: rgba(25, 90, 188, .85); cursor: pointer; }
+  #play:hover, #play:focus-visible { background: #195abc; outline: none; }
+  #play svg { display: block; width: 36px; height: 36px; margin: 0 auto 0 30px; fill: #fff; }
 </style>
 </head>
 <body>
 <!-- Reproductor para las ventanas de Ayuda del Geoportal (exb_config.py, _vista_video).
-     Uso: reproductor.html?v=<url del mp4>. ExB no desmonta la ventana al cerrarla (solo la
-     oculta): aqui se pausa el video y se corta su descarga en cuanto el iframe deja de
-     verse, y se reanuda desde el mismo punto al volver a verse. -->
-<video id="v" controls preload="auto" playsinline></video>
-<button id="sonido" type="button" hidden>&#128263; Activar sonido</button>
+     Uso: reproductor.html?v=<url del mp4>.
+     - No arranca solo: en un iframe de otro dominio (el Embed de ExB no lleva
+       allow="autoplay") el navegador no deja sonido sin un clic. Boton ▶ grande: un clic
+       y suena desde el principio.
+     - ExB no desmonta la ventana al cerrarla (solo la oculta): al dejar de verse se pausa
+       y se corta la descarga; al reabrir vuelve el ▶ y se sigue desde el mismo punto. -->
+<video id="v" controls preload="metadata" playsinline></video>
+<button id="play" type="button" aria-label="Reproducir" title="Reproducir" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l16 9-16 9z"/></svg>
+</button>
 <script>
   var v = document.getElementById("v");
-  var sonido = document.getElementById("sonido");
+  var play = document.getElementById("play");
   var url = new URLSearchParams(location.search).get("v") || "";
   var valido = /^https:\/\/sig\.mapama\.gob\.es\//.test(url);   // solo videos del MITECO
-  var visible = true;
+  var visible = true, posicion = 0, descargando = false;
 
-  // El iframe del Embed de ExB no tiene allow="autoplay": el navegador bloquea arrancar
-  // con sonido. Se intenta con sonido y, si falla, silenciado + boton "Activar sonido"
-  // (un clic dentro del iframe si permite el sonido).
-  function reproducir() {
-    if (!valido || !visible) { return; }
-    var p = v.play();
-    if (!p || !p.catch) { return; }
-    p.catch(function () {
-      v.muted = true;
-      sonido.hidden = false;
-      var q = v.play();
-      if (q && q.catch) { q.catch(function () {}); }
-    });
-  }
-  function pausar() { if (!v.paused) { v.pause(); } }
-  // Al cerrar la ventana: pausa y corta la descarga (quitar la fuente + load() aborta la
-  // peticion), guardando la posicion. Al reabrir: vuelve la fuente y sigue desde ahi.
-  var posicion = 0, descargando = false;
   function cargar() {
     if (!valido || descargando) { return; }
     descargando = true;
@@ -55,9 +42,11 @@
         v.currentTime = posicion;
       });
     }
+    play.hidden = false;
   }
+  // Quitar la fuente + load() aborta la peticion: corta la descarga
   function cortar() {
-    pausar();
+    if (!v.paused) { v.pause(); }
     if (!descargando) { return; }
     posicion = v.currentTime || posicion;
     descargando = false;
@@ -67,26 +56,27 @@
   function verse(si) {
     if (si === visible) { return; }
     visible = si;
-    if (si) { cargar(); reproducir(); } else { cortar(); }
+    if (si) { cargar(); } else { cortar(); }
   }
 
-  sonido.addEventListener("click", function () {
-    v.muted = false;
-    sonido.hidden = true;
-    reproducir();
+  play.addEventListener("click", function () {
+    var p = v.play();
+    if (p && p.catch) { p.catch(function () { play.hidden = false; }); }
   });
-  v.addEventListener("volumechange", function () { if (!v.muted) { sonido.hidden = true; } });
+  // Tambien vale el play de los controles nativos
+  v.addEventListener("play", function () { play.hidden = true; });
 
   cargar();
-  reproducir();
 
   // La ventana cerrada deja el iframe con 0 px o fuera de la vista
   addEventListener("resize", function () { verse(!!(innerWidth && innerHeight)); });
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (e) { verse(e[0].isIntersecting); }).observe(v);
   }
-  // Pestana del navegador en segundo plano: solo pausa (al volver se sigue con el play)
-  document.addEventListener("visibilitychange", function () { if (document.hidden) { pausar(); } });
+  // Pestana del navegador en segundo plano: solo pausa
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && !v.paused) { v.pause(); }
+  });
 </script>
 </body>
 </html>
