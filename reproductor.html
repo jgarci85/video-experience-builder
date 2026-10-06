@@ -4,30 +4,63 @@
 <meta charset="utf-8">
 <title>Vídeo</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+               font-family: "Segoe UI", Selawik, Arial, sans-serif; }
   video { display: block; width: 100%; height: 100%; }
+  #sonido { position: absolute; top: 12px; right: 12px; padding: 6px 12px;
+            border: 1px solid #fff; border-radius: 4px; background: rgba(0,0,0,.6);
+            color: #fff; font-size: 14px; cursor: pointer; }
+  #sonido:hover { background: #195abc; }
 </style>
 </head>
 <body>
-<!-- Reproductor para las ventanas de Ayuda del Geoportal (exb_config.py, _dialogo_video).
+<!-- Reproductor para las ventanas de Ayuda del Geoportal (exb_config.py, _vista_video).
      Uso: reproductor.html?v=<url del mp4>. ExB no desmonta la ventana al cerrarla (solo la
-     oculta): aqui se pausa el video en cuanto el iframe deja de verse. -->
-<video id="v" controls preload="metadata"></video>
+     oculta): aqui se pausa el video en cuanto el iframe deja de verse y se reanuda al
+     volver a verse. -->
+<video id="v" controls preload="auto" playsinline></video>
+<button id="sonido" type="button" hidden>&#128263; Activar sonido</button>
 <script>
   var v = document.getElementById("v");
+  var sonido = document.getElementById("sonido");
   var url = new URLSearchParams(location.search).get("v") || "";
-  if (/^https:\/\/sig\.mapama\.gob\.es\//.test(url)) {   // solo videos del MITECO
-    v.src = url;
-    // Reproduccion automatica; en un iframe de otro dominio el navegador puede
-    // bloquearla con sonido: entonces queda en pausa con los controles a la vista.
+  var valido = /^https:\/\/sig\.mapama\.gob\.es\//.test(url);   // solo videos del MITECO
+  var visible = true;
+
+  // El iframe del Embed de ExB no tiene allow="autoplay": el navegador bloquea arrancar
+  // con sonido. Se intenta con sonido y, si falla, silenciado + boton "Activar sonido"
+  // (un clic dentro del iframe si permite el sonido).
+  function reproducir() {
+    if (!valido || !visible) { return; }
     var p = v.play();
-    if (p && p.catch) { p.catch(function () {}); }
+    if (!p || !p.catch) { return; }
+    p.catch(function () {
+      v.muted = true;
+      sonido.hidden = false;
+      var q = v.play();
+      if (q && q.catch) { q.catch(function () {}); }
+    });
   }
   function pausar() { if (!v.paused) { v.pause(); } }
+  function verse(si) {
+    if (si === visible) { return; }
+    visible = si;
+    if (si) { reproducir(); } else { pausar(); }
+  }
+
+  sonido.addEventListener("click", function () {
+    v.muted = false;
+    sonido.hidden = true;
+    reproducir();
+  });
+  v.addEventListener("volumechange", function () { if (!v.muted) { sonido.hidden = true; } });
+
+  if (valido) { v.src = url; reproducir(); }
+
   // La ventana cerrada deja el iframe con 0 px o fuera de la vista
-  addEventListener("resize", function () { if (!innerWidth || !innerHeight) { pausar(); } });
+  addEventListener("resize", function () { verse(!!(innerWidth && innerHeight)); });
   if ("IntersectionObserver" in window) {
-    new IntersectionObserver(function (e) { if (!e[0].isIntersecting) { pausar(); } }).observe(v);
+    new IntersectionObserver(function (e) { verse(e[0].isIntersecting); }).observe(v);
   }
   document.addEventListener("visibilitychange", function () { if (document.hidden) { pausar(); } });
 </script>
